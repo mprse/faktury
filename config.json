@@ -1,0 +1,11 @@
+{
+    "api_token": "yC2icR3RmMZyvfjXznPi",
+    "fakturownia_subdomain": "johnypste",
+    "company_details": {
+      "name": "Pełna Nazwa Twojej Firmy Sp. z o.o.",
+      "tax_no": "6932100967",
+      "street": "ul. Twoja 1",
+      "city": "Twoje Miasto",
+      "post_code": "00-000"
+    }
+}
