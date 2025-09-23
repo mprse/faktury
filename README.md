@@ -42,12 +42,34 @@ Przykład pliku `config.json`:
 }
 ```
 
+Uwaga! Dane firmy muszą być zgodne z danymi w serwisie internetowym.
+Zaleca się korzystanie z opcji --dep.
+
 ## Użycie
 ### Import faktur z pliku CSV
-Uruchom skrypt z opcją `--csv` i podaj ścieżkę do pliku CSV:
+Uruchom skrypt z opcją `--csv` i podaj ścieżkę do pliku CSV. Użyj flagi `--invoice-type`, aby określić, czy importujesz faktury kosztowe (`cost`), czy sprzedażowe (`sales`).
+
+**Import faktur kosztowych (domyślnie):**
 ```bash
-python fakapp.py --csv sample.csv
+python fakapp.py --csv sample.csv --invoice-type cost
 ```
+
+**Import faktur sprzedażowych:**
+```bash
+python fakapp.py --csv sample.csv --invoice-type sales
+```
+
+**Import faktur z id klienta:**
+```bash
+python fakapp.py --csv sample.csv --client CLIENT_ID
+```
+Dane klienta z serwisu internetowego zostaną wykorzystane zamiast danych z pliku csv.
+
+**Import faktur z id departamenu:**
+```bash
+python fakapp.py --csv sample.csv --dep DEP_ID
+```
+Dane firmy z serwisu internetowego zostaną wykorzystane zamiast danych z pliku csv.
 
 ### Pobieranie faktury w formacie PDF
 Uruchom skrypt z opcją `--get-invoice` i podaj numer faktury:
@@ -62,9 +84,9 @@ python fakapp.py --clean-logs
 ```
 
 ## Przykładowe wywołania
-### Import faktur z pliku CSV
+### Import faktur z pliku CSV + dane klienta i firmy z serwisu internetowego
 ```bash
-python fakapp.py --csv invoices.csv
+python fakapp.py --csv invoices.csv --dep 1709379 --client 210248253 --invoice-type cost
 ```
 
 ### Pobieranie faktury w formacie PDF
@@ -87,11 +109,20 @@ INFO: Utworzono katalog na logi: C:\src\faktury\log
 2025-09-22 20:47:38,093 [INFO] - Próba utworzenia faktury: INV-2025-002...
 2025-09-22 20:47:38,500 [INFO] - Sukces! Faktura INV-2025-002 została pomyślnie utworzona.
 2025-09-22 20:47:38,501 [INFO] - Zakończono przetwarzanie pliku.
+
 PS C:\src\faktury> python .\fakapp.py --get-invoice "INV-2025-001"
 2025-09-22 20:47:41,438 [INFO] - Utworzono katalog na pobrane pliki: C:\src\faktury\download
 2025-09-22 20:47:41,438 [INFO] - Rozpoczynam wyszukiwanie faktury o numerze: INV-2025-001
 2025-09-22 20:47:41,646 [INFO] - Znaleziono fakturę. ID: 418903747
 2025-09-22 20:47:42,532 [INFO] - Sukces! Faktura została zapisana do pliku: download\INV-2025-001.pdf
+
+PS C:\src\faktury> python .\fakapp.py --csv .\sample.csv --dep 1709379 --client 210248253 --invoice-type cost
+2025-09-23 19:52:07,702 [INFO] - Rozpoczynam przetwarzanie pliku .\sample.csv...
+2025-09-23 19:52:07,703 [INFO] - Próba utworzenia faktury: INV-2025-001...
+2025-09-23 19:52:08,080 [INFO] - Sukces! Faktura INV-2025-001 została pomyślnie utworzona.
+2025-09-23 19:52:08,081 [INFO] - Próba utworzenia faktury: INV-2025-002...
+2025-09-23 19:52:08,383 [INFO] - Sukces! Faktura INV-2025-002 została pomyślnie utworzona.
+2025-09-23 19:52:08,383 [INFO] - Zakończono przetwarzanie pliku.
 ```
 
 ## Licencja

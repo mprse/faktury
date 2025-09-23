@@ -107,14 +107,14 @@ def get_invoice_pdf(invoice_number, config):
     except Exception as e:
         logging.error(f"Wystąpił nieoczekiwany błąd podczas pobierania PDF: {e}")
 
-def import_invoices_from_csv(csv_path, config):
+def import_invoices_from_csv(csv_path, config, invoice_type, department_id=None, client_id=None):
     # ... (bez zmian)
     try:
         with open(csv_path, mode='r', encoding='utf-8') as csvfile:
             reader = csv.DictReader(csvfile, delimiter=';')
             logging.info(f"Rozpoczynam przetwarzanie pliku {csv_path}...")
             for row in reader:
-                create_cost_invoice(row, config)
+                create_invoice(row, config, invoice_type, department_id, client_id)
             logging.info("Zakończono przetwarzanie pliku.")
     except FileNotFoundError:
         logging.error(f"Plik CSV nie został znaleziony: {csv_path}")
@@ -122,8 +122,7 @@ def import_invoices_from_csv(csv_path, config):
         logging.error(f"Wystąpił nieoczekiwany błąd podczas przetwarzania pliku CSV: {e}")
 
 
-def create_cost_invoice(invoice_data, config):
-    # ... (bez zmian)
+def create_invoice(invoice_data, config, invoice_type, department_id=None, client_id=None):
     api_token = config.get("api_token")
     api_url = f"https://{config.get('fakturownia_subdomain')}.fakturownia.pl/invoices.json"
     your_company_details = config.get("company_details", {})
@@ -134,18 +133,68 @@ def create_cost_invoice(invoice_data, config):
         "tax": invoice_data.get("tax")
     }
     
-    payload = {
-        "api_token": api_token, "invoice": {
-            "kind": "cost", "number": invoice_data.get("invoice_ref"), "issue_date": invoice_data.get("issue_date"),
-            "sell_date": invoice_data.get("sell_date"), "payment_to": invoice_data.get("payment_to"),
-            "seller_name": invoice_data.get("buyer_name"), "seller_tax_no": invoice_data.get("buyer_tax_no"),
-            "seller_street": invoice_data.get("buyer_street"), "seller_city": invoice_data.get("buyer_city"),
-            "seller_post_code": invoice_data.get("buyer_post_code"), "buyer_name": your_company_details.get("name"),
-            "buyer_tax_no": your_company_details.get("tax_no"), "buyer_street": your_company_details.get("street"),
-            "buyer_city": your_company_details.get("city"), "buyer_post_code": your_company_details.get("post_code"),
-            "positions": [position], "description": invoice_data.get("notes")
-        }
+    invoice_payload = {
+        "number": invoice_data.get("invoice_ref"), "issue_date": invoice_data.get("issue_date"),
+        "sell_date": invoice_data.get("sell_date"), "payment_to": invoice_data.get("payment_to"),
+        "positions": [position], "description": invoice_data.get("notes")
     }
+
+    if invoice_type == 'cost':
+        invoice_payload.update({"kind": "cost", "income": "0"})
+        # Dla faktur kosztowych: Nabywca to my (seller_*), Sprzedawca to kontrahent (buyer_*)
+
+        if department_id:
+            invoice_payload["department_id"] = department_id
+        else:
+            invoice_payload.update({
+                "seller_name": your_company_details.get("name"),
+                "seller_tax_no": your_company_details.get("tax_no"),
+                "seller_street": your_company_details.get("street"),
+                "seller_city": your_company_details.get("city"),
+                "seller_post_code": your_company_details.get("post_code")
+            })
+        
+        if client_id:
+            invoice_payload["client_id"] = client_id
+        else:
+            invoice_payload.update({
+                "buyer_name": invoice_data.get("buyer_name"),
+                "buyer_tax_no": invoice_data.get("buyer_tax_no"),
+                "buyer_street": invoice_data.get("buyer_street"),
+                "buyer_city": invoice_data.get("buyer_city"),
+                "buyer_post_code": invoice_data.get("buyer_post_code")
+            })
+    else: # invoice_type == 'sales'
+        invoice_payload["kind"] = invoice_data.get("kind", "vat")
+        # Dla faktur sprzedaży: Nabywca to kontrahent (buyer_*), Sprzedawca to my (seller_*)
+
+        if department_id:
+            invoice_payload["department_id"] = department_id
+        else:
+            invoice_payload.update({
+                "seller_name": your_company_details.get("name"),
+                "seller_tax_no": your_company_details.get("tax_no"),
+                "seller_street": your_company_details.get("street"),
+                "seller_city": your_company_details.get("city"),
+                "seller_post_code": your_company_details.get("post_code")
+            })
+
+        if client_id:
+            invoice_payload["client_id"] = client_id
+        else:
+            invoice_payload.update({
+                "buyer_name": invoice_data.get("buyer_name"),
+                "buyer_tax_no": invoice_data.get("buyer_tax_no"),
+                "buyer_street": invoice_data.get("buyer_street"),
+                "buyer_city": invoice_data.get("buyer_city"),
+                "buyer_post_code": invoice_data.get("buyer_post_code")
+            })
+
+    payload = {
+        "api_token": api_token,
+        "invoice": invoice_payload
+    }
+    
     payload["invoice"]["positions"][0] = {k: v for k, v in payload["invoice"]["positions"][0].items() if v is not None and v != ''}
 
     try:
@@ -153,7 +202,7 @@ def create_cost_invoice(invoice_data, config):
         response = requests.post(api_url, json=payload)
 
         if response.status_code == 201:
-            logging.info(f"✅ Sukces! Faktura {invoice_data.get('invoice_ref')} została pomyślnie utworzona.")
+            logging.info(f"Sukces! Faktura {invoice_data.get('invoice_ref')} została pomyślnie utworzona.")
         else:
             error_message = json.dumps(response.json(), indent=2, ensure_ascii=False)
             logging.error(f"Błąd! Nie udało się utworzyć faktury {invoice_data.get('invoice_ref')}.")
@@ -165,6 +214,9 @@ def create_cost_invoice(invoice_data, config):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Importer i menedżer faktur dla Fakturowni.")
     parser.add_argument("--config", default="config.json", nargs="?", help="Ścieżka do pliku konfiguracyjnego (domyślnie: config.json).")
+    parser.add_argument("--invoice-type", choices=['cost', 'sales'], default='sales', help="Typ faktury do utworzenia: 'cost' (kosztowa) lub 'sales' (sprzedażowa). Domyślnie: cost.")
+    parser.add_argument("--dep", help="ID departamentu (firmy) do użycia jako nabywca (faktura kosztowa) lub sprzedawca (faktura sprzedaży).")
+    parser.add_argument("--client", help="ID klienta do użycia jako sprzedawca (faktura kosztowa) lub nabywca (faktura sprzedaży).")
     
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--csv", help="Ścieżka do pliku CSV w celu importu faktur.")
@@ -181,6 +233,6 @@ if __name__ == "__main__":
         config = load_config(args.config)
         
         if args.csv:
-            import_invoices_from_csv(args.csv, config)
+            import_invoices_from_csv(args.csv, config, args.invoice_type, department_id=args.dep, client_id=args.client)
         elif args.get_invoice:
             get_invoice_pdf(args.get_invoice, config)
